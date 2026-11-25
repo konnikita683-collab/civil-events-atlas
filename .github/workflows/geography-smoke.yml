@@ -70,5 +70,24 @@ jobs:
             await page.locator('#tab-map').click();
             if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile map horizontal overflow');
             console.log('PASS: mobile atlas layout and tabs.');
+            await page.setViewportSize({width:1440,height:900});
+            let dashboardReady=false;
+            for(let n=0;n<12;n++){
+              const resp=await page.goto(base+'dashboard.html',{waitUntil:'domcontentloaded',timeout:20000});
+              if(resp?.ok()&&await page.locator('#list .record').count()===4){dashboardReady=true;break;}
+              await page.waitForTimeout(5000);
+            }
+            if(!dashboardReady)throw Error('Dashboard unavailable');
+            await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
+            if(!await page.locator('#map').isVisible()||!await page.locator('#rows article').first().isVisible())throw Error('Map and cards must coexist');
+            await page.locator('#r').selectOption({label:'Курская область'});
+            if(await page.locator('#list .record').count()!==3||await page.locator('#rows article').count()!==3)throw Error('Filter synchronization failed');
+            await page.locator('#list .record').first().click();
+            if(await page.locator('#rows article.selected').count()!==1)throw Error('Card selection failed');
+            await page.locator('#archive-reset').click();
+            if(await page.locator('#list .record').count()!==4)throw Error('Reset failed');
+            await page.setViewportSize({width:390,height:844});
+            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile dashboard horizontal overflow');
+            console.log('PASS: simultaneous map, historical cards, filters, selection and mobile layout.');
           } finally {await browser.close()}
           JS
