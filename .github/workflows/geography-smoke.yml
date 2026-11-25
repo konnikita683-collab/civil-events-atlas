@@ -1,0 +1,131 @@
+name: Geographic viewer HTTPS smoke test
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Install fixed Playwright version
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Verify published geographic viewer and historical archive
+        run: |
+          node --input-type=module <<'JS'
+          import {chromium} from 'playwright';
+          const base='https://konnikita683-collab.github.io/civil-events-atlas/';
+          const browser=await chromium.launch({headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+          try {
+            const page=await browser.newPage({viewport:{width:1440,height:900}});
+            page.on('pageerror',e=>console.log('PAGE ERROR:',e.message));
+            page.on('requestfailed',r=>console.log('NETWORK ERROR:',r.failure()?.errorText,r.url()));
+            let ok=false;
+            for(let n=0;n<8;n++){
+              const res=await page.goto(base,{waitUntil:'domcontentloaded',timeout:20000});
+              if(res?.ok()){ok=true;break;}
+              await page.waitForTimeout(5000);
+            }
+            if(!ok)throw Error('Published site did not return HTTP success');
+            await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
+            console.log('PASS: Fiord map actually rendered, no resource errors.');
+            await page.locator('#style').selectOption('dark');
+            await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
+            console.log('PASS: Dark map actually rendered.');
+            await page.locator('.maplibregl-ctrl-zoom-in').click();
+            await page.waitForTimeout(2500);
+            console.log('Zoom control clicked; diagnostic:',await page.locator('#log').innerText());
+            const r=await page.goto(base+'archive.html');
+            if(!r?.ok())throw Error('Historical archive unavailable');
+            await page.locator('#count').waitFor();
+            if(!((await page.locator('#count').innerText()).includes('4 из 4')))throw Error('Unexpected archive count');
+            await page.locator('#r').selectOption({label:'Курская область'});
+            if(!((await page.locator('#count').innerText()).includes('3 из 4')))throw Error('Region filter failed');
+            console.log('PASS: separate historical archive and region filter.');
+            let atlasReady=false;
+            for(let n=0;n<12;n++){
+              const resp=await page.goto(base+'atlas.html',{waitUntil:'domcontentloaded',timeout:20000});
+              if(resp?.ok()&&await page.locator('#tab-archive').count()){atlasReady=true;break;}
+              await page.waitForTimeout(5000);
+            }
+            if(!atlasReady)throw Error('New atlas not published yet');
+            await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
+            await page.locator('#tab-archive').click();
+            if(!await page.locator('#archive-panel').isVisible())throw Error('Archive tab not visible');
+            if(await page.locator('#geo-view').isVisible())throw Error('Map tab not hidden');
+            await page.locator('#r').selectOption({label:'Курская область'});
+            if(!(await page.locator('#count').innerText()).includes('3 из 4'))throw Error('Integrated filter failed');
+            await page.locator('#archive-reset').click();
+            if(!(await page.locator('#count').innerText()).includes('4 из 4'))throw Error('Reset failed');
+            await page.locator('#tab-map').click();
+            if(!await page.locator('#geo-view').isVisible())throw Error('Map tab restore failed');
+            console.log('PASS: integrated desktop atlas and separate historical archive tabs.');
+            await page.setViewportSize({width:390,height:844});
+            await page.locator('#tab-archive').click();
+            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile archive horizontal overflow');
+            await page.locator('#tab-map').click();
+            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile map horizontal overflow');
+            console.log('PASS: mobile atlas layout and tabs.');
+            await page.setViewportSize({width:1440,height:900});
+            let dashboardReady=false;
+            for(let n=0;n<12;n++){
+              const resp=await page.goto(base+'dashboard.html',{waitUntil:'domcontentloaded',timeout:20000});
+              if(resp?.ok()&&await page.locator('#list .record').count()===4){dashboardReady=true;break;}
+              await page.waitForTimeout(5000);
+            }
+            if(!dashboardReady)throw Error('Dashboard unavailable');
+            await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
+            if(!await page.locator('#map').isVisible()||!await page.locator('#rows article').first().isVisible())throw Error('Map and cards must coexist');
+            await page.locator('#r').selectOption({label:'Курская область'});
+            if(await page.locator('#list .record').count()!==3||await page.locator('#rows article').count()!==3)throw Error('Filter synchronization failed');
+            await page.locator('#list .record').first().click();
+            if(await page.locator('#rows article.selected').count()!==1)throw Error('Card selection failed');
+            await page.locator('#archive-reset').click();
+            if(await page.locator('#list .record').count()!==4)throw Error('Reset failed');
+            await page.setViewportSize({width:390,height:844});
+            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile dashboard horizontal overflow');
+            console.log('PASS: simultaneous map, historical cards, filters, selection and mobile layout.');
+            await page.setViewportSize({width:1440,height:900});
+            await page.clock.setFixedTime(new Date('2026-11-25T12:00:00Z'));
+            let loaded=false;
+            for(let n=0;n<15;n++){
+              const resp=await page.goto(base+'news.html?v=20261125-9',{waitUntil:'domcontentloaded',timeout:20000});
+              if(resp?.ok()&&await page.locator('#group-stats').count()&&(await page.locator('header').innerText()).includes('2026.11.25-9')){loaded=true;break;}
+              await page.waitForTimeout(5000);
+            }
+            if(!loaded)throw Error('Updated dashboard unavailable');
+            await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
+            if(await page.locator('#view-mode').inputValue()!=='combined')throw Error('Wrong default mode');
+            if(await page.locator('#list .record').count()!==2)throw Error('Wrong latest day count');
+            await page.locator('#month').click();
+            if(await page.locator('#list .record').count()!==9||await page.locator('.region-badge').count()!==6)throw Error('Wrong industry counts');
+            const groups=await page.locator('#group-stats button strong').allTextContents();
+            if(groups.map(Number).reduce((a,b)=>a+b,0)!==9)throw Error('Double counted groups');
+            await page.locator('#focus-regions').click();
+            await page.waitForFunction(()=>document.getElementById('boundary-status').textContent.includes('загружены')&&!!map.getLayer('news-area-fill'),{},{timeout:45000});
+            await page.waitForFunction(()=>map.queryRenderedFeatures({layers:['news-area-fill']}).length>0,{},{timeout:20000});
+            console.log('PASS: actual regional administrative polygons rendered.');
+            await page.locator('#view-mode').selectOption('markers');
+            if(await page.evaluate(()=>map.getLayoutProperty('news-area-fill','visibility'))!=='none')throw Error('Layer toggle failed');
+            await page.locator('#view-mode').selectOption('combined');
+            if(await page.evaluate(()=>map.getLayoutProperty('news-area-fill','visibility'))!=='visible')throw Error('Layer restore failed');
+            await page.locator('#c').selectOption('Промышленные материалы');
+            if(await page.locator('#list .record').count()!==5)throw Error('Industry group filter failed');
+            await page.locator('#c').selectOption('Транспортные материалы');
+            if(await page.locator('#list .record').count()!==4)throw Error('Transport group filter failed');
+            await page.locator('#scope').selectOption('all');
+            if(await page.locator('#list .record').count()!==23)throw Error('All archive count');
+            await page.locator('#c').selectOption('Гражданские материалы');
+            if(await page.locator('#list .record').count()!==14)throw Error('Civil count');
+            await page.locator('#archive-reset').click();
+            await page.waitForFunction(()=>Math.abs(map.getZoom()-home.zoom)<0.01,{},{timeout:12000});
+            if(await page.locator('#list .record').count()!==2)throw Error('Reset failed');
+            await page.setViewportSize({width:390,height:844});
+            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile overflow');
+            console.log('PASS: exclusive publication groups, regional markers, polygon toggle, date filters and reset.');
+          } finally {await browser.close()}
+          JS
