@@ -37,7 +37,7 @@ window.clearRegionBadges=clearBadges;
 function regionFocus(){if(map)map.fitBounds(bounds,{padding:55,maxZoom:6,duration:350})}
 $("focus-regions").onclick=regionFocus;
 function badge(coord,label,n,action){const b=node("button","");b.type="button";b.className="region-badge";b.setAttribute("aria-label",label+": "+n+" публикаций");b.append(node("strong",String(n)),node("span",label));b.onclick=e=>{e.stopPropagation();action()};badges.push(new maplibregl.Marker({element:b,anchor:"center"}).setLngLat(coord).addTo(map))}
-window.refreshRegionBadges=()=>{clearBadges();if(!map||!window.maplibregl||!map.loaded())return;const counts=new Map();visible.forEach(row=>counts.set(row[1],(counts.get(row[1])||0)+1));if(counts.size>1&&map.getZoom()<4){badge([37,51.2],counts.size+" региона",visible.length,regionFocus);return}
+window.refreshRegionBadges=()=>{clearBadges();if(!map||!window.maplibregl)return;const counts=new Map();visible.forEach(row=>counts.set(row[1],(counts.get(row[1])||0)+1));if(counts.size>1&&map.getZoom()<4){badge([37,51.2],counts.size+" региона",visible.length,regionFocus);return}
 counts.forEach((n,region)=>{if(regionAnchors[region])badge(regionAnchors[region],region,n,()=>{$("r").value=region;selected=null;render()})})};
 function render(){const from=$("from").value,to=$("to").value,valid=!from||!to||from<=to;
 const out=valid?data.filter(row=>ids.every((id,i)=>!$(id).value||row[i]===$(id).value)&&(!from||row[0]>=from)&&(!to||row[0]<=to)).sort((a,b)=>b[0].localeCompare(a[0])):[];visible=out;
