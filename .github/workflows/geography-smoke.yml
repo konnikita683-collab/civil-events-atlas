@@ -90,41 +90,37 @@ jobs:
             if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile dashboard horizontal overflow');
             console.log('PASS: simultaneous map, historical cards, filters, selection and mobile layout.');
             await page.setViewportSize({width:1440,height:900});
+            await page.clock.setFixedTime(new Date('2026-11-25T12:00:00Z'));
             let newsReady=false;
             for(let n=0;n<12;n++){
               const resp=await page.goto(base+'news.html',{waitUntil:'domcontentloaded',timeout:20000});
-              if(resp?.ok()&&await page.locator('#month').count()){newsReady=true;break;}
+              if(resp?.ok()&&await page.locator('#category-legend svg').count()===5){newsReady=true;break;}
               await page.waitForTimeout(5000);
             }
             if(!newsReady)throw Error('Updated dashboard unavailable');
             await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
             const bounds=await page.locator('#from').evaluate(e=>({min:e.min,max:e.max,value:e.value}));
-            const span=(a,b)=>(Date.parse(b)-Date.parse(a))/86400000;
-            if(span(bounds.min,bounds.max)!==29)throw Error('Archive must contain 30 inclusive days');
-            if(bounds.value!==bounds.max||await page.locator('#to').inputValue()!==bounds.max)throw Error('Default day incorrect');
-            if(await page.locator('#p option').count()!==31)throw Error('Missing individual dates');
-            await page.locator('#week').click();
-            if(span(await page.locator('#from').inputValue(),await page.locator('#to').inputValue())!==6)throw Error('Week preset failed');
+            if(bounds.min!=='2026-09-26'||bounds.max!=='2026-10-25'||bounds.value!==bounds.max)throw Error('Delayed window incorrect');
+            if(await page.locator('#list .record').count()!==1)throw Error('Latest day report missing');
+            if(await page.locator('.region-badge .category-icon').count()!==4)throw Error('Latest regional icons missing');
             await page.locator('#month').click();
-            if(await page.locator('#from').inputValue()!==bounds.min)throw Error('Month preset failed');
-            await page.locator('#p').selectOption(bounds.min);
-            if(await page.locator('#from').inputValue()!==bounds.min||await page.locator('#to').inputValue()!==bounds.min)throw Error('Oldest day failed');
-            const mid=new Date(Date.parse(bounds.min)+10*86400000).toISOString().slice(0,10);
-            await page.locator('#to').fill(mid);
-            if(await page.locator('#p').inputValue()!=='')throw Error('Range did not clear single day');
-            if(await page.locator('#to').inputValue()!==mid)throw Error('Custom range failed');
-            await page.locator('#from').fill(bounds.max);
-            if(!(await page.locator('#count').innerText()).includes('корректный период'))throw Error('Reversed range accepted');
-            await page.locator('#from').fill('2024-01-01');
-            if(!(await page.locator('#count').innerText()).includes('корректный период'))throw Error('Out of bounds date accepted');
+            if(await page.locator('#list .record').count()!==13)throw Error('Full sample count incorrect');
+            if(await page.locator('.region-badge').count()!==9)throw Error('Regional aggregation incorrect');
+            await page.locator('#c').selectOption({label:'Коммунальные услуги'});
+            if(await page.locator('#list .record').count()!==1)throw Error('Multi-category filter failed');
+            await page.locator('#c').selectOption('');
+            await page.locator('#p').selectOption('2026-10-23');
+            if(await page.locator('#list .record').count()!==2)throw Error('Day selection failed');
+            await page.locator('#p').selectOption('2026-09-26');
+            if(await page.locator('#list .record').count()!==0)throw Error('Empty day incorrect');
+            await page.locator('#month').click();
             await page.locator('#focus-regions').click();
-            await page.waitForFunction(()=>map.getZoom()>4,{},{timeout:12000});
+            await page.waitForFunction(()=>map.getZoom()>home.zoom,{},{timeout:12000});
             await page.locator('#archive-reset').click();
             await page.waitForFunction(()=>Math.abs(map.getZoom()-home.zoom)<0.01,{},{timeout:12000});
-            if(await page.locator('#from').inputValue()!==bounds.max||await page.locator('#to').inputValue()!==bounds.max)throw Error('Reset did not restore default day');
-            if(await page.locator('#list .record').count()!==0||await page.locator('.region-badge').count()!==0)throw Error('Unexpected old records');
+            if(await page.locator('#list .record').count()!==1)throw Error('Reset to latest day failed');
             await page.setViewportSize({width:390,height:844});
             if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile news horizontal overflow');
-            console.log('PASS: 30 inclusive dates, day/week/month presets, custom range, bounds, camera reset and mobile layout.');
+            console.log('PASS: delayed regional sample, five category icons, multi-category filtering, empty day, camera reset, mobile layout.');
           } finally {await browser.close()}
           JS
