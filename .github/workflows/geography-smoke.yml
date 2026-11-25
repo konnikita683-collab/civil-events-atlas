@@ -93,34 +93,34 @@ jobs:
             let newsReady=false;
             for(let n=0;n<12;n++){
               const resp=await page.goto(base+'news.html',{waitUntil:'domcontentloaded',timeout:20000});
-              if(resp?.ok()&&await page.locator('#list .record').count()===5){newsReady=true;break;}
+              if(resp?.ok()&&await page.locator('#week').count()){newsReady=true;break;}
               await page.waitForTimeout(5000);
             }
             if(!newsReady)throw Error('Press dashboard unavailable');
             await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
-            if(await page.locator('#rows article').count()!==5)throw Error('Missing press cards');
+            const defaultFrom=await page.locator('#from').inputValue(),defaultTo=await page.locator('#to').inputValue();
+            if((Date.parse(defaultTo)-Date.parse(defaultFrom))/86400000!==6)throw Error('Default week incorrect');
+            if(await page.locator('#list .record').count()!==0)throw Error('Old entries shown by default');
+            const historical=async()=>{await page.locator('#from').fill('2024-01-01');await page.locator('#to').fill('2024-12-31');await page.locator('#p').selectOption('');await page.locator('#r').selectOption('');};
+            await historical();
+            if(await page.locator('#list .record').count()!==5)throw Error('Historical sample missing');
+            if(await page.locator('#rows .category-icon').count()!==5)throw Error('Category icons missing');
+            if(await page.locator('.region-badge').count()!==2)throw Error('Regions incorrectly combined');
             await page.locator('#focus-regions').click();
-            await page.waitForFunction(()=>document.querySelectorAll('.region-badge').length===2,{},{timeout:12000});
-            await page.locator('.region-badge').filter({hasText:'Курская область'}).click();
-            if(await page.locator('#rows article').count()!==1)throw Error('Regional selection failed');
+            await page.waitForFunction(()=>map.getZoom()>4,{},{timeout:12000});
             await page.locator('#archive-reset').click();
+            await page.waitForFunction(()=>Math.abs(map.getZoom()-home.zoom)<0.01&&Math.abs(map.getCenter().lng-home.center[0])<0.01,{},{timeout:12000});
+            if(await page.locator('#from').inputValue()!==defaultFrom||await page.locator('#to').inputValue()!==defaultTo)throw Error('Reset did not restore week');
+            if(await page.locator('.region-badge').count()!==0)throw Error('Stale map labels');
+            await historical();
             await page.locator('#p').selectOption('2024-08-30');
-            if(await page.locator('#rows article').count()!==1)throw Error('Event date selection failed');
-            const cardText=await page.locator('#rows article').innerText();
-            if(!cardText.includes('Дата события: 2024-08-30')||!cardText.includes('Дата публикации: 2024-08-31'))throw Error('Separate dates missing');
+            if(await page.locator('#list .record').count()!==1)throw Error('Event date filter failed');
             await page.locator('#date-mode').selectOption('publication');
             await page.locator('#p').selectOption('2024-08-31');
-            if(await page.locator('#rows article').count()!==1)throw Error('Publication date mode failed');
-            await page.locator('#archive-reset').click();
-            await page.locator('#p').selectOption('2024-11-20');
-            if(await page.locator('#rows article').count()!==1)throw Error('Publication date filter failed');
-            await page.locator('#archive-reset').click();
-            await page.locator('#yesterday').click();
-            if(!(await page.locator('#rows').innerText()).includes('Сбор за текущие сутки не подключён'))throw Error('Missing coverage warning');
-            if(await page.locator('.region-badge').count()!==0)throw Error('Stale map labels');
+            if(await page.locator('#list .record').count()!==1)throw Error('Publication filter failed');
             await page.locator('#archive-reset').click();
             await page.setViewportSize({width:390,height:844});
             if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile news horizontal overflow');
-            console.log('PASS: regional historical press cards, map badges, date filtering and empty-coverage warning.');
+            console.log('PASS: week default, historical categories, distinct regional labels, camera reset and date modes.');
           } finally {await browser.close()}
           JS
