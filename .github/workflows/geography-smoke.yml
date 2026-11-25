@@ -46,5 +46,29 @@ jobs:
             await page.locator('#r').selectOption({label:'Курская область'});
             if(!((await page.locator('#count').innerText()).includes('3 из 4')))throw Error('Region filter failed');
             console.log('PASS: separate historical archive and region filter.');
+            let atlasReady=false;
+            for(let n=0;n<12;n++){
+              const resp=await page.goto(base+'atlas.html',{waitUntil:'domcontentloaded',timeout:20000});
+              if(resp?.ok()&&await page.locator('#tab-archive').count()){atlasReady=true;break;}
+              await page.waitForTimeout(5000);
+            }
+            if(!atlasReady)throw Error('New atlas not published yet');
+            await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
+            await page.locator('#tab-archive').click();
+            if(!await page.locator('#archive-panel').isVisible())throw Error('Archive tab not visible');
+            if(await page.locator('#geo-view').isVisible())throw Error('Map tab not hidden');
+            await page.locator('#r').selectOption({label:'Курская область'});
+            if(!(await page.locator('#count').innerText()).includes('3 из 4'))throw Error('Integrated filter failed');
+            await page.locator('#archive-reset').click();
+            if(!(await page.locator('#count').innerText()).includes('4 из 4'))throw Error('Reset failed');
+            await page.locator('#tab-map').click();
+            if(!await page.locator('#geo-view').isVisible())throw Error('Map tab restore failed');
+            console.log('PASS: integrated desktop atlas and separate historical archive tabs.');
+            await page.setViewportSize({width:390,height:844});
+            await page.locator('#tab-archive').click();
+            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile archive horizontal overflow');
+            await page.locator('#tab-map').click();
+            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile map horizontal overflow');
+            console.log('PASS: mobile atlas layout and tabs.');
           } finally {await browser.close()}
           JS
