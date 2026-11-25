@@ -93,46 +93,44 @@ jobs:
             await page.clock.setFixedTime(new Date('2026-11-25T12:00:00Z'));
             let newsReady=false;
             for(let n=0;n<12;n++){
-              const resp=await page.goto(base+'news.html',{waitUntil:'domcontentloaded',timeout:20000});
-              if(resp?.ok()&&await page.locator('#publisher option').count()===14){newsReady=true;break;}
+              const resp=await page.goto(base+'news.html?v=20261125-5',{waitUntil:'domcontentloaded',timeout:20000});
+              if(resp?.ok()&&await page.locator('header').innerText().then(t=>t.includes('2026.11.25-5'))){newsReady=true;break;}
               await page.waitForTimeout(5000);
             }
-            if(!newsReady)throw Error('Updated dashboard unavailable');
+            if(!newsReady)throw Error('Final dashboard not published');
             await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
-            const bounds=await page.locator('#from').evaluate(e=>({min:e.min,max:e.max,value:e.value}));
-            if(bounds.min!=='2026-09-26'||bounds.max!=='2026-10-25'||bounds.value!==bounds.max)throw Error('Delayed window incorrect');
-            if(await page.locator('#list .record').count()!==3)throw Error('Latest day report missing');
-            if(await page.locator('.region-badge .category-icon').count()!==7)throw Error('Latest regional icons missing');
+            if(await page.locator('#scope').inputValue()!=='industry')throw Error('Default scope');
+            if(await page.locator('#list .record').count()!==3)throw Error('Latest day count');
             await page.locator('#month').click();
-            if(await page.locator('#list .record').count()!==23)throw Error('Full sample count incorrect');
-            if(await page.locator('.region-badge').count()!==14)throw Error('Regional aggregation incorrect');
+            if(await page.locator('#list .record').count()!==17)throw Error('Industry scope count');
+            if(await page.locator('#rows article figure').count()!==17)throw Error('Missing card illustrations');
+            if(await page.locator('#category-legend .legend-choice').count()!==13)throw Error('Missing industry categories');
+            await page.locator('#c').selectOption('Нефтепереработка');
+            if(await page.locator('#list .record').count()!==2)throw Error('Industry category filter');
+            await page.waitForFunction(()=>[...document.querySelectorAll('#rows figure')].every(f=>f.querySelector('img:not([hidden])')?.naturalWidth>0||f.querySelector('figcaption').textContent.includes('фото не загрузилось')),{},{timeout:45000});
+            if(await page.locator('#rows figcaption').count()!==2)throw Error('Missing illustration caption');
+            await page.locator('#c').selectOption('Портовая инфраструктура');
+            if(await page.locator('#list .record').count()!==0)throw Error('Empty category incorrect');
+            if(!(await page.locator('#rows').innerText()).includes('не означает'))throw Error('Missing coverage warning');
+            await page.locator('#scope').selectOption('all');
+            if(await page.locator('#list .record').count()!==23)throw Error('All materials count');
             await page.locator('#publisher').selectOption('УНИАН');
-            if(await page.locator('#list .record').count()!==1||await page.locator('.region-badge').count()!==0)throw Error('Ukrainian source filter failed');
-            await page.locator('#publisher').selectOption('Украинская правда');
-            if(await page.locator('#list .record').count()!==1)throw Error('Second Ukrainian source missing');
-            await page.locator('#publisher').selectOption('АиФ Ростов');
-            if(await page.locator('#list .record').count()!==1||await page.locator('.region-badge').count()!==1)throw Error('Regional source filter failed');
+            if(await page.locator('#list .record').count()!==1||await page.locator('.region-badge').count()!==0)throw Error('Source and overview separation');
             await page.locator('#publisher').selectOption('');
-            await page.locator('#c').selectOption({label:'Нефтепереработка'});
-            if(await page.locator('#list .record').count()!==2)throw Error('Refinery sector filter failed');
-            await page.locator('#kind').selectOption('context');
-            if(await page.locator('#list .record').count()!==1||await page.locator('.region-badge').count()!==0)throw Error('National context separation failed');
-            await page.locator('#kind').selectOption('');
-            await page.locator('#c').selectOption({label:'Коммунальные услуги'});
-            if(await page.locator('#list .record').count()!==1)throw Error('Multi-category filter failed');
-            await page.locator('#c').selectOption('');
+            await page.locator('#scope').selectOption('civil');
+            if(await page.locator('#list .record').count()!==6)throw Error('Civil scope count');
+            await page.locator('#scope').selectOption('all');
             await page.locator('#p').selectOption('2026-10-23');
-            if(await page.locator('#list .record').count()!==5)throw Error('Day selection failed');
-            await page.locator('#p').selectOption('2026-09-26');
-            if(await page.locator('#list .record').count()!==0)throw Error('Empty day incorrect');
+            if(await page.locator('#list .record').count()!==5)throw Error('Day selection');
             await page.locator('#month').click();
             await page.locator('#focus-regions').click();
             await page.waitForFunction(()=>map.getZoom()>home.zoom,{},{timeout:12000});
             await page.locator('#archive-reset').click();
             await page.waitForFunction(()=>Math.abs(map.getZoom()-home.zoom)<0.01,{},{timeout:12000});
-            if(await page.locator('#list .record').count()!==3)throw Error('Reset to latest day failed');
+            if(await page.locator('#list .record').count()!==3||await page.locator('#scope').inputValue()!=='industry')throw Error('Reset default');
+            if(await page.locator('header a[href="index.html"]').count()!==1)throw Error('Separate geography link absent');
             await page.setViewportSize({width:390,height:844});
-            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile news horizontal overflow');
-            console.log('PASS: delayed regional sample, source filter, nine category icons and industry context, multi-category filtering, empty day, camera reset, mobile layout.');
+            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile overflow');
+            console.log('PASS: thematic archive, illustrated cards or explicit image fallback, date/source filters, empty-category disclosure, camera reset and mobile layout.');
           } finally {await browser.close()}
           JS
