@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Географический атлас — тест HTTPS</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#091725;color:#e5eff9;font:15px system-ui,sans-serif}header{padding:15px 20px;border-bottom:1px solid #314d63;display:flex;flex-wrap:wrap;gap:10px;align-items:center}h1{font-size:20px;margin:0 auto 0 0}select,button{color:inherit;background:#142b3e;border:1px solid #42617b;border-radius:7px;padding:10px;font:inherit}button{cursor:pointer}main{padding:12px;display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:12px}#map{min-height:340px;height:calc(100dvh - 105px);border:1px solid #314d63;border-radius:10px;overflow:hidden;background:#132b3b}aside{background:#102332;border:1px solid #314d63;border-radius:10px;padding:15px;align-self:start}h2{font-size:16px;margin:0 0 12px}p{line-height:1.5}small{color:#a6b9ca}#status{font-weight:600}#log{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;color:#bbcbda;max-height:250px;overflow:auto}a{color:#93c7ff}@media(max-width:720px){main{grid-template-columns:1fr}#map{height:60dvh}h1{width:100%}}
+</style></head><body><header><h1>Географический атлас · проверка HTTPS</h1><select id="style" aria-label="Оформление"><option value="fiord">Fiord</option><option value="dark">Dark</option><option value="liberty">Liberty</option></select><button id="reset">Общий вид</button><button id="retry">Повторить</button></header><main><div id="map" aria-label="Интерактивная географическая карта"></div><aside><h2>Диагностика загрузки</h2><p id="status" role="status">Загрузка библиотеки…</p><small id="origin"></small><pre id="log"></pre><p>Отдельный тест обычной картографии без событий. Масштабирование и подписи предоставляются картографическим сервисом.</p><small>OpenFreeMap · OpenStreetMap · MapLibre</small></aside></main>
+<script src="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const home={center:[10,49],zoom:3};
+let map=null,timer=null,generation=0,errors=0,ready=false;
+function note(s){$("log").textContent=($("log").textContent+"\n"+s).trim().slice(-2500)}
+function status(s){$("status").textContent=s}
+$("origin").textContent="Протокол: "+location.protocol;
+function start(){
+ const token=++generation;clearTimeout(timer);if(map){map.remove();map=null}
+ $("log").textContent="";errors=0;ready=false;
+ if(!window.maplibregl){status("Библиотека MapLibre не загрузилась");return}
+ try{
+  status("Загрузка стиля и тайлов…");
+  const instance=new maplibregl.Map({container:"map",style:"https://tiles.openfreemap.org/styles/"+$("style").value,...home,maxZoom:18});
+  map=instance;
+  instance.addControl(new maplibregl.NavigationControl());
+  instance.addControl(new maplibregl.ScaleControl({unit:"metric"}));
+  instance.on("error",e=>{if(token!==generation)return;errors++;note(String(e.error?.message||"Ошибка ресурса"));if(!ready)status("Ошибка загрузки; проверка продолжается")});
+  instance.on("idle",()=>{if(token!==generation)return;try{const count=instance.queryRenderedFeatures().length;if(instance.isStyleLoaded()&&instance.areTilesLoaded()&&count>0){ready=true;clearTimeout(timer);status(errors?"Карта отрисована, но есть ошибки ресурсов":"Карта отрисована");note("Масштаб "+instance.getZoom().toFixed(1)+"; видимых элементов "+count)}}catch(e){note(e.message)}});
+  timer=setTimeout(()=>{if(token===generation&&!ready)status("Отрисовка не подтверждена за 25 секунд")},25000);
+ }catch(e){status("Не удалось запустить движок");note(e.message)}
+}
+$("style").onchange=start;$("retry").onclick=start;$("reset").onclick=()=>map?.jumpTo(home);start();
+</script></body></html>
