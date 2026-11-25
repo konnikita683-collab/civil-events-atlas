@@ -93,38 +93,39 @@ jobs:
             await page.clock.setFixedTime(new Date('2026-11-25T12:00:00Z'));
             let loaded=false;
             for(let n=0;n<15;n++){
-              const resp=await page.goto(base+'news.html?v=20261125-7',{waitUntil:'domcontentloaded',timeout:20000});
-              if(resp?.ok()&&await page.locator('#view-mode').count()){loaded=true;break;}
+              const resp=await page.goto(base+'news.html?v=20261125-9',{waitUntil:'domcontentloaded',timeout:20000});
+              if(resp?.ok()&&await page.locator('#group-stats').count()&&(await page.locator('header').innerText()).includes('2026.11.25-9')){loaded=true;break;}
               await page.waitForTimeout(5000);
             }
-            if(!loaded)throw Error('New version unavailable');
+            if(!loaded)throw Error('Updated dashboard unavailable');
             await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
-            if(await page.locator('#view-mode').inputValue()!=='objects')throw Error('Wrong default');
-            if(await page.locator('#list .record').count()!==1||await page.locator('.object-marker').count()!==1||await page.locator('.region-badge').count()!==0)throw Error('Object mode must contain only passenger airport');
+            if(await page.locator('#view-mode').inputValue()!=='combined')throw Error('Wrong default mode');
+            if(await page.locator('#list .record').count()!==2)throw Error('Wrong latest day count');
+            await page.locator('#month').click();
+            if(await page.locator('#list .record').count()!==9||await page.locator('.region-badge').count()!==6)throw Error('Wrong industry counts');
+            const groups=await page.locator('#group-stats button strong').allTextContents();
+            if(groups.map(Number).reduce((a,b)=>a+b,0)!==9)throw Error('Double counted groups');
             await page.locator('#focus-regions').click();
-            await page.waitForFunction(()=>map.getZoom()>7,{},{timeout:12000});
-            await page.locator('.object-marker').click();
-            const card=page.locator('#rows article.selected');
-            if(await card.count()!==1||!(await card.innerText()).includes('Международный аэропорт «Казань»'))throw Error('Object selection failed');
-            if(!(await card.innerText()).includes('36')||!(await card.innerText()).includes('38'))throw Error('Source discrepancy lost');
-            await card.locator('figure').scrollIntoViewIfNeeded();
-            await page.waitForFunction(()=>{const f=document.querySelector('#rows figure');return f?.querySelector('img:not([hidden])')?.naturalWidth>0||f?.querySelector('figcaption')?.textContent.includes('фото не загрузилось')},{},{timeout:45000});
-            console.log('Passenger image status:',await card.locator('figcaption').innerText());
-            await page.locator('#month').click();
-            if(await page.locator('#list .record').count()!==1)throw Error('Unidentified objects leaked into object mode');
-            await page.locator('#p').selectOption('2026-10-24');
-            if(await page.locator('.object-marker').count()!==0)throw Error('Date filter failed');
-            await page.locator('#archive-reset').click();
-            if(await page.locator('.object-marker').count()!==1)throw Error('Reset missing marker');
-            await page.waitForFunction(()=>Math.abs(map.getZoom()-home.zoom)<0.01,{},{timeout:12000});
-            await page.locator('#view-mode').selectOption('regions');
-            await page.locator('#month').click();
-            if(await page.locator('#list .record').count()!==17||await page.locator('.object-marker').count()!==0)throw Error('Regional archive separation failed');
+            await page.waitForFunction(()=>document.getElementById('boundary-status').textContent.includes('загружены')&&!!map.getLayer('news-area-fill'),{},{timeout:45000});
+            await page.waitForFunction(()=>map.queryRenderedFeatures({layers:['news-area-fill']}).length>0,{},{timeout:20000});
+            console.log('PASS: actual regional administrative polygons rendered.');
+            await page.locator('#view-mode').selectOption('markers');
+            if(await page.evaluate(()=>map.getLayoutProperty('news-area-fill','visibility'))!=='none')throw Error('Layer toggle failed');
+            await page.locator('#view-mode').selectOption('combined');
+            if(await page.evaluate(()=>map.getLayoutProperty('news-area-fill','visibility'))!=='visible')throw Error('Layer restore failed');
+            await page.locator('#c').selectOption('Промышленные материалы');
+            if(await page.locator('#list .record').count()!==5)throw Error('Industry group filter failed');
+            await page.locator('#c').selectOption('Транспортные материалы');
+            if(await page.locator('#list .record').count()!==4)throw Error('Transport group filter failed');
             await page.locator('#scope').selectOption('all');
-            if(await page.locator('#list .record').count()!==23)throw Error('Historical archive lost');
-            await page.locator('#view-mode').selectOption('objects');
+            if(await page.locator('#list .record').count()!==23)throw Error('All archive count');
+            await page.locator('#c').selectOption('Гражданские материалы');
+            if(await page.locator('#list .record').count()!==14)throw Error('Civil count');
+            await page.locator('#archive-reset').click();
+            await page.waitForFunction(()=>Math.abs(map.getZoom()-home.zoom)<0.01,{},{timeout:12000});
+            if(await page.locator('#list .record').count()!==2)throw Error('Reset failed');
             await page.setViewportSize({width:390,height:844});
             if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile overflow');
-            console.log('PASS: named passenger-service object, map selection, card details, date reset and separate regional archive.');
+            console.log('PASS: exclusive publication groups, regional markers, polygon toggle, date filters and reset.');
           } finally {await browser.close()}
           JS
