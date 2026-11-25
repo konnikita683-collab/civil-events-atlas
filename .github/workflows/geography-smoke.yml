@@ -89,5 +89,30 @@ jobs:
             await page.setViewportSize({width:390,height:844});
             if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile dashboard horizontal overflow');
             console.log('PASS: simultaneous map, historical cards, filters, selection and mobile layout.');
+            await page.setViewportSize({width:1440,height:900});
+            let newsReady=false;
+            for(let n=0;n<12;n++){
+              const resp=await page.goto(base+'news.html',{waitUntil:'domcontentloaded',timeout:20000});
+              if(resp?.ok()&&await page.locator('#list .record').count()===3){newsReady=true;break;}
+              await page.waitForTimeout(5000);
+            }
+            if(!newsReady)throw Error('Press dashboard unavailable');
+            await page.waitForFunction(()=>document.getElementById('status')?.textContent==='Карта отрисована',{},{timeout:45000});
+            if(await page.locator('#rows article').count()!==3)throw Error('Missing press cards');
+            await page.locator('#focus-regions').click();
+            await page.waitForFunction(()=>document.querySelectorAll('.region-badge').length===2,{},{timeout:12000});
+            await page.locator('.region-badge').filter({hasText:'Курская область'}).click();
+            if(await page.locator('#rows article').count()!==1)throw Error('Regional selection failed');
+            await page.locator('#archive-reset').click();
+            await page.locator('#p').selectOption('2024-11-20');
+            if(await page.locator('#rows article').count()!==1)throw Error('Publication date filter failed');
+            await page.locator('#archive-reset').click();
+            await page.locator('#yesterday').click();
+            if(!(await page.locator('#rows').innerText()).includes('Сбор за текущие сутки не подключён'))throw Error('Missing coverage warning');
+            if(await page.locator('.region-badge').count()!==0)throw Error('Stale map labels');
+            await page.locator('#archive-reset').click();
+            await page.setViewportSize({width:390,height:844});
+            if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1))throw Error('Mobile news horizontal overflow');
+            console.log('PASS: regional historical press cards, map badges, date filtering and empty-coverage warning.');
           } finally {await browser.close()}
           JS
